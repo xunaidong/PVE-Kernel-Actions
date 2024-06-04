@@ -5,21 +5,31 @@ name: PVE-Kernel-CI
 
 # 触发条件
 on:
-  # push:
-  #  branches:
-  #   - master
+  push:
+   branches:
+    - master
   schedule:
      - cron: 0 0 * * 4
   # release:
   #   types: [published]
   # watch:
   #   types: [started]
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: "SSH connection to Actions"
+        required: false
+        type: choice
+        default: "false"
+        options:
+          - "true"
+          - "false"
 
 # 环境变量
 env:
   REPO_BRANCH: master
   UPLOAD_BIN: true
-  UPLOAD_BRANCH: true
+  UPLOAD_BRANCH: false
 
 jobs:
   build:
@@ -36,6 +46,14 @@ jobs:
         run: |
           git fetch --no-tags --prune --depth=1 origin +refs/heads/*:refs/remotes/origin/*
 
+      # SSH接入
+      - name: SSH connection to Actions
+        uses: P3TERX/ssh2actions@v1.0.0
+        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
       # 环境初始
       - name: Initialization
         env:
@@ -45,19 +63,33 @@ jobs:
           sudo chmod a+w /etc/apt/sources.list
 
           sudo wget -qO - http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg | sudo apt-key add -
-          sudo -E echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" >>/etc/apt/sources.list
-          sudo wget -qO - http://download.proxmox.com/debian/proxmox-release-bullseye.gpg | sudo apt-key add -
-          sudo -E echo "deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription" >>/etc/apt/sources.list
-          # sudo wget -qO - http://ftp.debian.org/debian/dists/bullseye-backports/Release.gpg | sudo apt-key add -
+          sudo -E echo "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription" >>/etc/apt/sources.list
+          sudo wget -qO - http://download.proxmox.com/debian/proxmox-release-bookworm.gpg | sudo apt-key add -
+          sudo -E echo "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription" >>/etc/apt/sources.list
+          # sudo wget -qO - http://ftp.debian.org/debian/dists/bookworm-backports/Release.gpg | sudo apt-key add -
           
-          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 04EE7237B7D453EC
-          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 648ACFD622F3D138
-          sudo -E echo "deb http://deb.debian.org/debian buster-backports main" >>/etc/apt/sources.list
-          
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0E98404D386FA1D9 6ED0E7B82643E131 54404762BBB6E853 BDE6D2B9216EC7A8
+          sudo -E echo "deb http://deb.debian.org/debian bookworm-backports main" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian bookworm main non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian bookworm main non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian-security/ bookworm-security main non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian-security/ bookworm-security main non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian bookworm-updates main non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian bookworm-updates main non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian-security/ bookworm-security main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian-security/ bookworm-security main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+          sudo -E echo "deb-src http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware" >>/etc/apt/sources.list
+
           sudo -E apt-get update
+          sudo -E apt-get upgrade -y
           sudo -E apt-get install git nano screen patch fakeroot build-essential devscripts libncurses5 libncurses5-dev libssl-dev bc flex bison libelf-dev libaudit-dev libgtk2.0-dev libperl-dev asciidoc xmlto gnupg gnupg2 rsync lintian debhelper libdw-dev libnuma-dev libslang2-dev sphinx-common asciidoc-base automake cpio dh-python file gcc kmod libiberty-dev libtool perl-modules python2-minimal sed tar zlib1g-dev liblz4-tool idn
           sudo -E apt-get install libpve-common-perl dwarves
-          sudo -E apt-get install -t buster-backports dwarves
+          sudo -E apt-get install -t bookworm-backports dwarves
           sudo -E apt-get autoremove --purge
           sudo -E apt-get clean
           
@@ -81,9 +113,9 @@ jobs:
       - name: Modify Code
         run: |
           cd pve-kernel
-          sed -i "s/106 @@/105 @@/g" patches/kernel/0003-pci-Enable-overrides-for-missing-ACS-capabilities-4..patch
-          sed -i "/pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS))/d" patches/kernel/0003-pci-Enable-overrides-for-missing-ACS-capabilities-4..patch
-          sed -i "s/(dev) ||/(dev))/g" patches/kernel/0003-pci-Enable-overrides-for-missing-ACS-capabilities-4..patch
+          sed -i "s/106 @@/105 @@/g" patches/kernel/0004-pci-Enable-overrides-for-missing-ACS-capabilities-4..patch
+          sed -i "/pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS))/d" patches/kernel/0004-pci-Enable-overrides-for-missing-ACS-capabilities-4..patch
+          sed -i "s/(dev) ||/(dev))/g" patches/kernel/0004-pci-Enable-overrides-for-missing-ACS-capabilities-4..patch
       
       # 修正 BTF
       - name: Fix DEBUG_INFO_BTF
@@ -114,7 +146,7 @@ jobs:
           echo "Current Path:" $PWD
           ls -l -A
           echo "========================================"
-          
+  
       # 开始编译
       - name: Compile File
         id: compile
@@ -169,7 +201,7 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN == 'true'
         with:
-          name: ${{ format('{0}-YFDOOR', steps.getversion.outputs.version)}} 
+          name: ${{ format('{0}', steps.getversion.outputs.version)}} 
           path: PVE
 
       # 更新分支
