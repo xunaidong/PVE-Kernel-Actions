@@ -27,7 +27,7 @@ on:
 
 # 环境变量
 env:
-  REPO_BRANCH: master
+  REPO_BRANCH: 5.15
   UPLOAD_BIN: true
   UPLOAD_BRANCH: false
 
